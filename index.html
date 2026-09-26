@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stall Registration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Vadodara:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1C2440; --ink-soft:#4A5270; --line:#D5D9E3; --bg:#F3F5F8; --paper:#FFFFFF;
+    --marigold:#E8A317; --marigold-deep:#B97D06; --ok:#2F7D5B; --err:#B3261E;
+    color-scheme: light;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Hind Vadodara",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:17px;line-height:1.5}
+  main{max-width:560px;margin:0 auto;padding:24px 16px 64px}
+  h1{font-size:1.75rem;line-height:1.2;margin:8px 0 4px;font-weight:700}
+  .intro{color:var(--ink-soft);margin:0 0 24px}
+  section,fieldset{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:18px;margin:0 0 16px}
+  fieldset{min-width:0}
+  legend{font-weight:700;font-size:1.1rem;padding:0 6px;margin-left:-6px}
+  h2{font-size:1.1rem;margin:0 0 10px}
+  label,.field-label{display:block;font-weight:600;margin:10px 0 6px}
+  input[type=text],input[type=search]{width:100%;font:inherit;padding:12px 14px;border:1.5px solid var(--line);
+    border-radius:10px;background:#fff;color:var(--ink)}
+  input:focus,button:focus-visible,li:focus-visible{outline:3px solid var(--marigold);outline-offset:1px;border-color:var(--ink)}
+
+  /* stall picker */
+  .combo{position:relative}
+  .list{list-style:none;margin:6px 0 0;padding:4px;border:1.5px solid var(--line);border-radius:10px;
+    max-height:260px;overflow:auto;background:#fff}
+  .list li{padding:10px 12px;border-radius:8px;cursor:pointer;display:flex;justify-content:space-between;gap:12px}
+  .list li .sub{color:var(--ink-soft);font-size:.9rem}
+  .list li.active{background:#FDF3DC}
+  .list li[aria-disabled=true]{cursor:not-allowed;color:#9AA0B2}
+  .list li[aria-disabled=true] .tag{color:var(--err);font-size:.85rem;font-weight:600}
+  .list .empty{color:var(--ink-soft);cursor:default}
+
+  /* the selected stall plate — the one bold element */
+  .plate{display:flex;align-items:center;gap:16px;margin-top:14px;padding:14px 16px;border-radius:12px;
+    background:var(--marigold);color:var(--ink)}
+  .plate .num{font-size:2.6rem;font-weight:700;line-height:1;letter-spacing:.01em}
+  .plate .meta{flex:1;font-size:.95rem}
+  .plate button{background:transparent;border:1.5px solid var(--ink);color:var(--ink);border-radius:8px;
+    padding:6px 12px;font:inherit;font-weight:600;cursor:pointer}
+
+  /* uploads */
+  .pick{display:flex;gap:10px;flex-wrap:wrap}
+  .btn-sec{flex:1 1 140px;font:inherit;font-weight:600;padding:12px;border-radius:10px;border:1.5px dashed var(--ink-soft);
+    background:#FAFBFD;color:var(--ink);cursor:pointer}
+  .btn-sec:hover{border-style:solid}
+  .preview{display:flex;align-items:center;gap:12px;padding:10px;border:1.5px solid var(--ok);border-radius:10px;background:#F1F8F4}
+  .preview img{width:64px;height:64px;object-fit:cover;border-radius:6px;background:#ddd}
+  .preview .pdf{width:64px;height:64px;border-radius:6px;background:var(--ink);color:#fff;display:grid;place-items:center;font-weight:700}
+  .preview .info{flex:1;min-width:0;font-size:.92rem}
+  .preview .info b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .preview button{font:inherit;background:none;border:none;color:var(--err);font-weight:600;cursor:pointer;padding:6px}
+  .hint{color:var(--ink-soft);font-size:.88rem;margin:6px 0 0}
+  .error-text{color:var(--err);font-size:.92rem;margin:6px 0 0;font-weight:500}
+
+  .submit{width:100%;font:inherit;font-size:1.1rem;font-weight:700;padding:15px;border:none;border-radius:12px;
+    background:var(--ink);color:#fff;cursor:pointer}
+  .submit:disabled{opacity:.6;cursor:wait}
+  .banner{padding:12px 14px;border-radius:10px;margin:0 0 16px;font-weight:500}
+  .banner.err{background:#FBEAE8;color:var(--err);border:1px solid #F0C2BD}
+
+  .done{text-align:center;padding:32px 18px}
+  .done .num{font-size:3.4rem;font-weight:700;background:var(--marigold);display:inline-block;padding:6px 22px;border-radius:12px;margin:8px 0 12px}
+  .done p{margin:6px 0}
+  .done .ref{font-weight:700;font-size:1.15rem}
+  [hidden]{display:none!important}
+  @media (prefers-reduced-motion:no-preference){ .plate{animation:drop .25s ease-out} @keyframes drop{from{transform:translateY(-6px);opacity:0}} }
+</style>
+</head>
+<body>
+<main>
+  <h1>Stall registration</h1>
+  <p class="intro">Select your stall and add both stall holders with their Aadhaar copies.</p>
+
+  <div id="banner" class="banner err" role="alert" hidden></div>
+
+  <form id="regForm" novalidate>
+    <section>
+      <h2>Your stall</h2>
+      <div class="combo">
+        <label for="stallSearch">Search stall number</label>
+        <input id="stallSearch" type="search" autocomplete="off" placeholder="Loading stalls…" disabled
+               role="combobox" aria-controls="stallList" aria-expanded="false" aria-autocomplete="list">
+        <ul id="stallList" class="list" role="listbox" hidden></ul>
+      </div>
+      <div id="plate" class="plate" hidden>
+        <div class="num" id="plateNum"></div>
+        <div class="meta" id="plateMeta"></div>
+        <button type="button" id="changeStall">Change</button>
+      </div>
+      <p class="error-text" id="errStall" hidden></p>
+    </section>
+
+    <fieldset data-person="1">
+      <legend>First person</legend>
+      <label for="name1">Full name</label>
+      <input id="name1" type="text" autocomplete="name" maxlength="120">
+      <p class="error-text" id="errName1" hidden></p>
+      <span class="field-label">Aadhaar copy</span>
+      <div class="upload" data-person="1"></div>
+      <p class="error-text" id="errFile1" hidden></p>
+    </fieldset>
+
+    <fieldset data-person="2">
+      <legend>Second person</legend>
+      <label for="name2">Full name</label>
+      <input id="name2" type="text" autocomplete="off" maxlength="120">
+      <p class="error-text" id="errName2" hidden></p>
+      <span class="field-label">Aadhaar copy</span>
+      <div class="upload" data-person="2"></div>
+      <p class="error-text" id="errFile2" hidden></p>
+    </fieldset>
+
+    <button type="submit" class="submit" id="submitBtn">Register stall</button>
+  </form>
+
+  <section id="done" class="done" hidden>
+    <p>Registered</p>
+    <div class="num" id="doneNum"></div>
+    <p>Reference number</p>
+    <p class="ref" id="doneRef"></p>
+    <p class="hint">Keep this reference for any queries.</p>
+    <br>
+    <button type="button" class="submit" id="againBtn">Register another stall</button>
+  </section>
+</main>
+
+<template id="uploadTpl">
+  <div class="pick">
+    <button type="button" class="btn-sec" data-act="camera">Take photo</button>
+    <button type="button" class="btn-sec" data-act="file">Choose PDF or image</button>
+  </div>
+  <input type="file" accept="image/*" capture="environment" data-kind="camera" hidden>
+  <input type="file" accept="application/pdf,image/*" data-kind="file" hidden>
+  <div class="preview" hidden>
+    <div class="thumb"></div>
+    <div class="info"><b class="fname"></b><span class="fsize"></span></div>
+    <button type="button" data-act="remove">Remove</button>
+  </div>
+  <p class="hint">PDF up to 5 MB, or a clear photo of the Aadhaar card.</p>
+</template>
+
+<script>
+/* ===== CONFIG ===== */
+const API_URL = 'PASTE_APPS_SCRIPT_WEB_APP_URL_HERE';   // ends with /exec
+const MAX_PDF_BYTES = 5 * 1024 * 1024;
+const IMG_MAX_SIDE = 1600, IMG_QUALITY = 0.75;
+
+/* ===== STATE ===== */
+let stalls = [], selected = null, activeIdx = -1;
+const files = { 1: null, 2: null };
+const $ = id => document.getElementById(id);
+
+/* ===== STALL PICKER ===== */
+const search = $('stallSearch'), list = $('stallList');
+
+async function loadStalls() {
+  try {
+    const r = await fetch(API_URL + '?action=stalls');
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error);
+    stalls = d.stalls;
+    search.disabled = false;
+    search.placeholder = 'Type stall number, e.g. A-12';
+  } catch (e) {
+    search.placeholder = 'Stall list unavailable';
+    showBanner('Could not load the stall list. Check your internet connection and reload the page.');
+  }
+}
+
+function renderList() {
+  const q = search.value.trim().toLowerCase();
+  const items = stalls.filter(s => !q || s.no.toLowerCase().includes(q) || s.label.toLowerCase().includes(q));
+  list.innerHTML = '';
+  if (!items.length) {
+    list.innerHTML = '<li class="empty">No stall matches “' + escapeHtml(search.value) + '”.</li>';
+  }
+  items.forEach((s, i) => {
+    const li = document.createElement('li');
+    li.setAttribute('role', 'option');
+    li.id = 'opt-' + i;
+    li.dataset.no = s.no;
+    if (s.taken) li.setAttribute('aria-disabled', 'true');
+    li.innerHTML = '<span><b>' + escapeHtml(s.no) + '</b>' +
+      (s.label ? ' <span class="sub">' + escapeHtml(s.label) + '</span>' : '') + '</span>' +
+      (s.taken ? '<span class="tag">Registered</span>' : '');
+    li.addEventListener('mousedown', ev => { ev.preventDefault(); if (!s.taken) pickStall(s); });
+    list.appendChild(li);
+  });
+  activeIdx = -1;
+  openList(true);
+}
+
+function openList(open) {
+  list.hidden = !open;
+  search.setAttribute('aria-expanded', String(open));
+}
+
+function moveActive(step) {
+  const opts = [...list.querySelectorAll('li[role=option]')];
+  if (!opts.length) return;
+  let i = activeIdx;
+  do { i = (i + step + opts.length) % opts.length; } while (opts[i].getAttribute('aria-disabled') === 'true' && i !== activeIdx && opts.some(o => o.getAttribute('aria-disabled') !== 'true'));
+  opts.forEach(o => o.classList.remove('active'));
+  opts[i].classList.add('active');
+  opts[i].scrollIntoView({ block: 'nearest' });
+  search.setAttribute('aria-activedescendant', opts[i].id);
+  activeIdx = i;
+}
+
+function pickStall(s) {
+  selected = s;
+  search.value = s.no;
+  openList(false);
+  $('plateNum').textContent = s.no;
+  $('plateMeta').textContent = s.label || 'Stall selected';
+  $('plate').hidden = false;
+  search.closest('.combo').hidden = true;
+  hideErr('errStall');
+  $('name1').focus();
+}
+
+search.addEventListener('input', () => { selected = null; renderList(); });
+search.addEventListener('focus', renderList);
+search.addEventListener('blur', () => setTimeout(() => openList(false), 120));
+search.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); if (list.hidden) renderList(); moveActive(1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); moveActive(-1); }
+  else if (e.key === 'Enter') {
+    e.preventDefault();
+    const li = list.querySelectorAll('li[role=option]')[activeIdx];
+    const s = li && stalls.find(x => x.no === li.dataset.no);
+    if (s && !s.taken) pickStall(s);
+  } else if (e.key === 'Escape') openList(false);
+});
+$('changeStall').addEventListener('click', () => {
+  selected = null; $('plate').hidden = true;
+  search.closest('.combo').hidden = false; search.value = ''; search.focus();
+});
+
+/* ===== UPLOADS ===== */
+document.querySelectorAll('.upload').forEach(box => {
+  const p = box.dataset.person;
+  box.appendChild(document.getElementById('uploadTpl').content.cloneNode(true));
+  const cam = box.querySelector('[data-kind=camera]'), fil = box.querySelector('[data-kind=file]');
+  box.querySelector('[data-act=camera]').onclick = () => cam.click();
+  box.querySelector('[data-act=file]').onclick = () => fil.click();
+  box.querySelector('[data-act=remove]').onclick = () => setFile(p, null);
+  [cam, fil].forEach(inp => inp.addEventListener('change', async () => {
+    const f = inp.files[0]; inp.value = '';
+    if (!f) return;
+    try { setFile(p, await prepareFile(f)); hideErr('errFile' + p); }
+    catch (err) { showErr('errFile' + p, err.message); }
+  }));
+});
+
+function setFile(p, data) {
+  files[p] = data;
+  const box = document.querySelector('.upload[data-person="' + p + '"]');
+  const pv = box.querySelector('.preview'), pick = box.querySelector('.pick');
+  if (!data) { pv.hidden = true; pick.hidden = false; return; }
+  const thumb = box.querySelector('.thumb');
+  thumb.innerHTML = data.mimeType === 'application/pdf'
+    ? '<div class="pdf">PDF</div>'
+    : '<img alt="Aadhaar photo preview" src="data:' + data.mimeType + ';base64,' + data.data + '">';
+  box.querySelector('.fname').textContent = data.name;
+  box.querySelector('.fsize').textContent = formatSize(data.size);
+  pv.hidden = false; pick.hidden = true;
+}
+
+async function prepareFile(file) {
+  if (file.type === 'application/pdf') {
+    if (file.size > MAX_PDF_BYTES) throw new Error('This PDF is ' + formatSize(file.size) + '. Use a PDF under 5 MB or take a photo instead.');
+    return { name: file.name, mimeType: file.type, size: file.size, data: await toBase64(file) };
+  }
+  if (file.type.startsWith('image/')) {
+    const blob = await compressImage(file);
+    const base = (file.name.replace(/\.[^.]+$/, '') || 'aadhaar') + '.jpg';
+    return { name: base, mimeType: 'image/jpeg', size: blob.size, data: await toBase64(blob) };
+  }
+  throw new Error('Choose a PDF or an image file.');
+}
+
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, IMG_MAX_SIDE / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => b ? resolve(b) : reject(new Error('Could not read this photo. Try again.')), 'image/jpeg', IMG_QUALITY);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('This image format is not supported. Take a new photo or upload a PDF.')); };
+    img.src = url;
+  });
+}
+
+function toBase64(blob) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result).split(',')[1]);
+    r.onerror = () => rej(new Error('Could not read the file.'));
+    r.readAsDataURL(blob);
+  });
+}
+
+/* ===== SUBMIT ===== */
+$('regForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  hideBanner();
+  if (!validate()) return;
+
+  const btn = $('submitBtn');
+  btn.disabled = true; btn.textContent = 'Uploading…';
+  try {
+    const payload = {
+      stallNo: selected.no,
+      person1Name: $('name1').value.trim(),
+      person2Name: $('name2').value.trim(),
+      file1: { mimeType: files[1].mimeType, data: files[1].data },
+      file2: { mimeType: files[2].mimeType, data: files[2].data }
+    };
+    // text/plain body = no CORS preflight with Apps Script
+    const r = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Registration failed.');
+    selected.taken = true;
+    $('doneNum').textContent = d.stallNo;
+    $('doneRef').textContent = d.reference;
+    $('regForm').hidden = true; $('done').hidden = false;
+    window.scrollTo(0, 0);
+  } catch (err) {
+    showBanner(err.message.includes('Failed to fetch')
+      ? 'Upload did not reach the server. Check your internet connection and try again.'
+      : err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Register stall';
+  }
+});
+
+function validate() {
+  let ok = true, first = null;
+  const fail = (id, msg, el) => { showErr(id, msg); ok = false; first = first || el; };
+  ['errStall','errName1','errName2','errFile1','errFile2'].forEach(hideErr);
+  if (!selected) fail('errStall', 'Select your stall number from the list.', search);
+  if (!$('name1').value.trim()) fail('errName1', 'Enter the first person’s name.', $('name1'));
+  if (!files[1]) fail('errFile1', 'Add the first person’s Aadhaar copy.', null);
+  if (!$('name2').value.trim()) fail('errName2', 'Enter the second person’s name.', $('name2'));
+  if (!files[2]) fail('errFile2', 'Add the second person’s Aadhaar copy.', null);
+  if (!ok) (first || document.querySelector('.error-text:not([hidden])')).scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (first) first.focus({ preventScroll: true });
+  return ok;
+}
+
+$('againBtn').addEventListener('click', () => {
+  $('regForm').reset(); setFile(1, null); setFile(2, null);
+  selected = null; $('plate').hidden = true; search.closest('.combo').hidden = false;
+  $('done').hidden = true; $('regForm').hidden = false;
+  loadStalls();
+});
+
+/* ===== UTIL ===== */
+function showErr(id, m) { const el = $(id); el.textContent = m; el.hidden = false; }
+function hideErr(id) { $(id).hidden = true; }
+function showBanner(m) { const b = $('banner'); b.textContent = m; b.hidden = false; window.scrollTo(0, 0); }
+function hideBanner() { $('banner').hidden = true; }
+function formatSize(n) { return n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB'; }
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+loadStalls();
+</script>
+</body>
+</html>
