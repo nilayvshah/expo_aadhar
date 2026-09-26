@@ -78,7 +78,7 @@
 <body>
 <main>
   <h1>Stall registration</h1>
-  <p class="intro">Select your stall and add both stall holders with their Aadhaar copies.</p>
+  <p class="intro">Select your stall and add both stall holders with their Aadhaar copy and photo.</p>
 
   <div id="banner" class="banner err" role="alert" hidden></div>
 
@@ -105,8 +105,11 @@
       <input id="name1" type="text" autocomplete="name" maxlength="120">
       <p class="error-text" id="errName1" hidden></p>
       <span class="field-label">Aadhaar copy</span>
-      <div class="upload" data-person="1"></div>
-      <p class="error-text" id="errFile1" hidden></p>
+      <div class="upload" data-key="1a" data-kind="aadhaar"></div>
+      <p class="error-text" id="errFile1a" hidden></p>
+      <span class="field-label">Photo</span>
+      <div class="upload" data-key="1p" data-kind="photo"></div>
+      <p class="error-text" id="errFile1p" hidden></p>
     </fieldset>
 
     <fieldset data-person="2">
@@ -115,8 +118,11 @@
       <input id="name2" type="text" autocomplete="off" maxlength="120">
       <p class="error-text" id="errName2" hidden></p>
       <span class="field-label">Aadhaar copy</span>
-      <div class="upload" data-person="2"></div>
-      <p class="error-text" id="errFile2" hidden></p>
+      <div class="upload" data-key="2a" data-kind="aadhaar"></div>
+      <p class="error-text" id="errFile2a" hidden></p>
+      <span class="field-label">Photo</span>
+      <div class="upload" data-key="2p" data-kind="photo"></div>
+      <p class="error-text" id="errFile2p" hidden></p>
     </fieldset>
 
     <button type="submit" class="submit" id="submitBtn">Register stall</button>
@@ -136,16 +142,16 @@
 <template id="uploadTpl">
   <div class="pick">
     <button type="button" class="btn-sec" data-act="camera">Take photo</button>
-    <button type="button" class="btn-sec" data-act="file">Choose PDF or image</button>
+    <button type="button" class="btn-sec" data-act="file"></button>
   </div>
-  <input type="file" accept="image/*" capture="environment" data-kind="camera" hidden>
-  <input type="file" accept="application/pdf,image/*" data-kind="file" hidden>
+  <input type="file" accept="image/*" data-kind="camera" hidden>
+  <input type="file" data-kind="file" hidden>
   <div class="preview" hidden>
     <div class="thumb"></div>
     <div class="info"><b class="fname"></b><span class="fsize"></span></div>
     <button type="button" data-act="remove">Remove</button>
   </div>
-  <p class="hint">PDF up to 5 MB, or a clear photo of the Aadhaar card.</p>
+  <p class="hint"></p>
 </template>
 
 <script>
@@ -153,26 +159,44 @@
 const API_URL = 'PASTE_APPS_SCRIPT_WEB_APP_URL_HERE';   // ends with /exec
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
 const IMG_MAX_SIDE = 1600, IMG_QUALITY = 0.75;
+const UPLOADS = {
+  aadhaar: { fileLabel: 'Choose PDF or image', accept: 'application/pdf,image/*', capture: 'environment',
+             hint: 'PDF up to 5 MB, or a clear photo of the Aadhaar card.', label: 'Aadhaar copy' },
+  photo:   { fileLabel: 'Choose image', accept: 'image/*', capture: 'user',
+             hint: 'A clear, front-facing photo of the person.', label: 'photo' }
+};
+const UPLOAD_KEYS = ['1a', '1p', '2a', '2p'];
 
 /* ===== STATE ===== */
 let stalls = [], selected = null, activeIdx = -1;
-const files = { 1: null, 2: null };
+const files = { '1a': null, '1p': null, '2a': null, '2p': null };
 const $ = id => document.getElementById(id);
 
 /* ===== STALL PICKER ===== */
 const search = $('stallSearch'), list = $('stallList');
 
 async function loadStalls() {
+  search.disabled = true;
+  search.placeholder = 'Loading stalls…';
   try {
-    const r = await fetch(API_URL + '?action=stalls');
-    const d = await r.json();
-    if (!d.ok) throw new Error(d.error);
-    stalls = d.stalls;
+    if (!API_URL || API_URL.includes('PASTE_')) throw new Error('API_URL is not set in index.html.');
+    let r;
+    try { r = await fetch(API_URL + '?action=stalls'); }
+    catch (_) { throw new Error('Could not reach the server. Check that the Web app access is set to "Anyone" and the URL ends with /exec.'); }
+    const text = await r.text();
+    let d;
+    try { d = JSON.parse(text); }
+    catch (_) { throw new Error('The server did not return stall data. Re-deploy the Web app with "Who has access: Anyone".'); }
+    if (!d.ok) throw new Error('Server error: ' + d.error);
+    stalls = d.stalls || [];
+    if (!stalls.length) throw new Error('The Stalls tab has no stall numbers in column A.');
     search.disabled = false;
-    search.placeholder = 'Type stall number, e.g. A-12';
+    search.placeholder = 'Type stall number or name, e.g. A01';
+    hideBanner();
   } catch (e) {
     search.placeholder = 'Stall list unavailable';
-    showBanner('Could not load the stall list. Check your internet connection and reload the page.');
+    showBanner('Could not load the stall list. ' + e.message);
+    console.error(e);
   }
 }
 
@@ -248,42 +272,47 @@ $('changeStall').addEventListener('click', () => {
 
 /* ===== UPLOADS ===== */
 document.querySelectorAll('.upload').forEach(box => {
-  const p = box.dataset.person;
+  const key = box.dataset.key, kind = box.dataset.kind, cfg = UPLOADS[kind];
   box.appendChild(document.getElementById('uploadTpl').content.cloneNode(true));
   const cam = box.querySelector('[data-kind=camera]'), fil = box.querySelector('[data-kind=file]');
+  cam.setAttribute('capture', cfg.capture);
+  fil.accept = cfg.accept;
+  box.querySelector('[data-act=file]').textContent = cfg.fileLabel;
+  box.querySelector('.hint').textContent = cfg.hint;
   box.querySelector('[data-act=camera]').onclick = () => cam.click();
   box.querySelector('[data-act=file]').onclick = () => fil.click();
-  box.querySelector('[data-act=remove]').onclick = () => setFile(p, null);
+  box.querySelector('[data-act=remove]').onclick = () => setFile(key, null);
   [cam, fil].forEach(inp => inp.addEventListener('change', async () => {
     const f = inp.files[0]; inp.value = '';
     if (!f) return;
-    try { setFile(p, await prepareFile(f)); hideErr('errFile' + p); }
-    catch (err) { showErr('errFile' + p, err.message); }
+    try { setFile(key, await prepareFile(f, kind)); hideErr('errFile' + key); }
+    catch (err) { showErr('errFile' + key, err.message); }
   }));
 });
 
-function setFile(p, data) {
-  files[p] = data;
-  const box = document.querySelector('.upload[data-person="' + p + '"]');
+function setFile(key, data) {
+  files[key] = data;
+  const box = document.querySelector('.upload[data-key="' + key + '"]');
   const pv = box.querySelector('.preview'), pick = box.querySelector('.pick');
   if (!data) { pv.hidden = true; pick.hidden = false; return; }
   const thumb = box.querySelector('.thumb');
   thumb.innerHTML = data.mimeType === 'application/pdf'
     ? '<div class="pdf">PDF</div>'
-    : '<img alt="Aadhaar photo preview" src="data:' + data.mimeType + ';base64,' + data.data + '">';
+    : '<img alt="Preview" src="data:' + data.mimeType + ';base64,' + data.data + '">';
   box.querySelector('.fname').textContent = data.name;
   box.querySelector('.fsize').textContent = formatSize(data.size);
   pv.hidden = false; pick.hidden = true;
 }
 
-async function prepareFile(file) {
+async function prepareFile(file, kind) {
+  if (kind === 'photo' && !file.type.startsWith('image/')) throw new Error('Choose an image for the photo (JPG or PNG).');
   if (file.type === 'application/pdf') {
     if (file.size > MAX_PDF_BYTES) throw new Error('This PDF is ' + formatSize(file.size) + '. Use a PDF under 5 MB or take a photo instead.');
     return { name: file.name, mimeType: file.type, size: file.size, data: await toBase64(file) };
   }
   if (file.type.startsWith('image/')) {
     const blob = await compressImage(file);
-    const base = (file.name.replace(/\.[^.]+$/, '') || 'aadhaar') + '.jpg';
+    const base = (file.name.replace(/\.[^.]+$/, '') || kind) + '.jpg';
     return { name: base, mimeType: 'image/jpeg', size: blob.size, data: await toBase64(blob) };
   }
   throw new Error('Choose a PDF or an image file.');
@@ -327,8 +356,8 @@ $('regForm').addEventListener('submit', async e => {
       stallNo: selected.no,
       person1Name: $('name1').value.trim(),
       person2Name: $('name2').value.trim(),
-      file1: { mimeType: files[1].mimeType, data: files[1].data },
-      file2: { mimeType: files[2].mimeType, data: files[2].data }
+      aadhaar1: pack(files['1a']), photo1: pack(files['1p']),
+      aadhaar2: pack(files['2a']), photo2: pack(files['2p'])
     };
     // text/plain body = no CORS preflight with Apps Script
     const r = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
@@ -351,19 +380,20 @@ $('regForm').addEventListener('submit', async e => {
 function validate() {
   let ok = true, first = null;
   const fail = (id, msg, el) => { showErr(id, msg); ok = false; first = first || el; };
-  ['errStall','errName1','errName2','errFile1','errFile2'].forEach(hideErr);
+  ['errStall','errName1','errName2'].concat(UPLOAD_KEYS.map(k => 'errFile' + k)).forEach(hideErr);
   if (!selected) fail('errStall', 'Select your stall number from the list.', search);
-  if (!$('name1').value.trim()) fail('errName1', 'Enter the first person’s name.', $('name1'));
-  if (!files[1]) fail('errFile1', 'Add the first person’s Aadhaar copy.', null);
-  if (!$('name2').value.trim()) fail('errName2', 'Enter the second person’s name.', $('name2'));
-  if (!files[2]) fail('errFile2', 'Add the second person’s Aadhaar copy.', null);
+  [['1', 'first'], ['2', 'second']].forEach(([n, who]) => {
+    if (!$('name' + n).value.trim()) fail('errName' + n, 'Enter the ' + who + ' person’s name.', $('name' + n));
+    if (!files[n + 'a']) fail('errFile' + n + 'a', 'Add the ' + who + ' person’s Aadhaar copy.', null);
+    if (!files[n + 'p']) fail('errFile' + n + 'p', 'Add the ' + who + ' person’s photo.', null);
+  });
   if (!ok) (first || document.querySelector('.error-text:not([hidden])')).scrollIntoView({ behavior: 'smooth', block: 'center' });
   if (first) first.focus({ preventScroll: true });
   return ok;
 }
 
 $('againBtn').addEventListener('click', () => {
-  $('regForm').reset(); setFile(1, null); setFile(2, null);
+  $('regForm').reset(); UPLOAD_KEYS.forEach(k => setFile(k, null));
   selected = null; $('plate').hidden = true; search.closest('.combo').hidden = false;
   $('done').hidden = true; $('regForm').hidden = false;
   loadStalls();
@@ -374,6 +404,7 @@ function showErr(id, m) { const el = $(id); el.textContent = m; el.hidden = fals
 function hideErr(id) { $(id).hidden = true; }
 function showBanner(m) { const b = $('banner'); b.textContent = m; b.hidden = false; window.scrollTo(0, 0); }
 function hideBanner() { $('banner').hidden = true; }
+function pack(f) { return { mimeType: f.mimeType, data: f.data }; }
 function formatSize(n) { return n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB'; }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
